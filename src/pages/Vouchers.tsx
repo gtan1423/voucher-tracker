@@ -1,12 +1,61 @@
 import { useMemo, useState } from 'react'
 import { useVouchers } from '@/hooks/useVouchers'
 import VoucherRow from '@/components/VoucherRow'
+import CompactVoucherRow from '@/components/CompactVoucherRow'
+import VoucherTableHead, { type SortKey } from '@/components/VoucherTableHead'
 import { TYPE_OPTIONS, INTEREST_OPTIONS } from '@/lib/types'
 import type { VoucherStatus } from '@/lib/types'
 
-type SortKey = 'name' | 'value' | 'start_date' | 'expiry_date' | 'ageing_bucket' | 'type' | 'status' | 'interest'
+type ViewMode = 'compact' | 'expanded'
+type GroupField = 'none' | 'name' | 'value' | 'interest' | 'type' | 'ageing_bucket'
 
 const AGEING_ORDER = ['(1) Overdue', '(2) 0-30 Days', '(3) 31-60 Days', '(4) 61-90 Days', '(5) 91+ Days', 'No Expiry']
+const INTEREST_ORDER = ['High', 'Medium', 'Low']
+
+const GROUP_OPTIONS: { value: GroupField; label: string }[] = [
+  { value: 'none', label: 'No grouping' },
+  { value: 'name', label: 'Name' },
+  { value: 'value', label: 'Value' },
+  { value: 'interest', label: 'Priority' },
+  { value: 'type', label: 'Category' },
+  { value: 'ageing_bucket', label: 'Ageing Bucket' },
+]
+
+function valueLabel(v: VoucherStatus): string {
+  if (typeof v.value === 'number') return `$${v.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  return v.value_note || 'No value'
+}
+
+function groupVouchers(list: VoucherStatus[], field: GroupField): { label: string; rows: VoucherStatus[] }[] {
+  if (field === 'none') return [{ label: '', rows: list }]
+
+  const keyFn: Record<Exclude<GroupField, 'none'>, (v: VoucherStatus) => string> = {
+    name: (v) => v.name || '(untitled)',
+    value: valueLabel,
+    interest: (v) => v.interest || '—',
+    type: (v) => v.type || '—',
+    ageing_bucket: (v) => v.ageing_bucket,
+  }
+  const getKey = keyFn[field]
+
+  const groups = new Map<string, VoucherStatus[]>()
+  for (const v of list) {
+    const key = getKey(v)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(v)
+  }
+
+  let orderedKeys: string[]
+  if (field === 'ageing_bucket') {
+    orderedKeys = AGEING_ORDER.filter((k) => groups.has(k))
+  } else if (field === 'interest') {
+    orderedKeys = [...INTEREST_ORDER.filter((k) => groups.has(k)), ...[...groups.keys()].filter((k) => !INTEREST_ORDER.includes(k)).sort()]
+  } else {
+    orderedKeys = [...groups.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }
+
+  return orderedKeys.map((label) => ({ label, rows: groups.get(label)! }))
+}
 
 function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -26,6 +75,9 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
 
 export default function Vouchers() {
   const { vouchers, loading, error, createVoucher, updateVoucher, deleteVoucher } = useVouchers()
+
+  const [viewMode, setViewMode] = useState<ViewMode>('compact')
+  const [groupBy, setGroupBy] = useState<GroupField>('none')
 
   const [search, setSearch] = useState('')
   const [types, setTypes] = useState<Set<string>>(new Set())
@@ -77,6 +129,8 @@ export default function Vouchers() {
     return list
   }, [vouchers, search, types, statuses, interests, ageings, sort])
 
+  const grouped = useMemo(() => groupVouchers(filtered, groupBy), [filtered, groupBy])
+
   const clearFilters = () => {
     setSearch('')
     setTypes(new Set())
@@ -111,38 +165,46 @@ export default function Vouchers() {
   const openCount = vouchers.filter((v) => v.status === 'Open').length
   const overdueCount = vouchers.filter((v) => v.ageing_bucket === '(1) Overdue').length
 
-  const th = (label: string, key?: SortKey) => (
-    <th
-      onClick={key ? () => toggleSort(key) : undefined}
-      className="cursor-pointer px-2.5 py-2.5 text-left text-[11px] font-semibold tracking-wide uppercase whitespace-nowrap"
-      style={{ color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}
-    >
-      {label}
-      {sort.key === key ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
-    </th>
-  )
+  const selectCls = 'rounded border px-2.5 py-1.5 text-xs'
 
   return (
     <div className="mx-auto max-w-6xl p-4">
-      <div className="mb-3 flex flex-wrap gap-5 text-sm" style={{ color: 'var(--muted)' }}>
-        <span>
-          <strong style={{ color: 'var(--text)' }}>{vouchers.length}</strong> total
-        </span>
-        <span>
-          <strong style={{ color: 'var(--text)' }}>{filtered.length}</strong> shown
-        </span>
-        <span>
-          <strong style={{ color: 'var(--text)' }}>{openCount}</strong> open
-        </span>
-        <span>
-          <strong style={{ color: 'var(--text)' }}>{overdueCount}</strong> overdue
-        </span>
-        <span>
-          Total value:{' '}
-          <strong style={{ color: 'var(--text)' }}>
-            ${totalValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </strong>
-        </span>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-5 text-sm" style={{ color: 'var(--muted)' }}>
+          <span><strong style={{ color: 'var(--text)' }}>{vouchers.length}</strong> total</span>
+          <span><strong style={{ color: 'var(--text)' }}>{filtered.length}</strong> shown</span>
+          <span><strong style={{ color: 'var(--text)' }}>{openCount}</strong> open</span>
+          <span><strong style={{ color: 'var(--text)' }}>{overdueCount}</strong> overdue</span>
+          <span>
+            Total value:{' '}
+            <strong style={{ color: 'var(--text)' }}>
+              ${totalValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </strong>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {viewMode === 'compact' && (
+            <select
+              value={groupBy}
+              onChange={(e) => setGroupBy(e.target.value as GroupField)}
+              className={selectCls}
+              style={{ borderColor: 'var(--border)', background: 'var(--card)', color: 'var(--text)' }}
+            >
+              {GROUP_OPTIONS.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.value === 'none' ? 'Group by…' : `Group by ${g.label}`}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={() => setViewMode((m) => (m === 'compact' ? 'expanded' : 'compact'))}
+            className={selectCls}
+            style={{ borderColor: 'var(--border)', background: 'var(--card)', color: 'var(--text)' }}
+          >
+            {viewMode === 'compact' ? 'Show expanded view' : 'Show compact view'}
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-5 rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--card)' }}>
@@ -199,48 +261,52 @@ export default function Vouchers() {
 
       {error && <p className="mb-3 text-sm" style={{ color: 'var(--danger)' }}>{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'var(--border)', background: 'var(--card)' }}>
-        <table className="w-full min-w-[1100px] border-collapse">
-          <thead>
-            <tr>
-              <th style={{ borderBottom: '1px solid var(--border)' }}></th>
-              {th('Name / Description', 'name')}
-              {th('Value ($)', 'value')}
-              {th('Start Date', 'start_date')}
-              {th('Expiry Date', 'expiry_date')}
-              {th('Ageing Bucket', 'ageing_bucket')}
-              <th className="px-2.5 py-2.5 text-left text-[11px] font-semibold tracking-wide uppercase" style={{ color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
-                Days Until Expiry
-              </th>
-              {th('Type', 'type')}
-              {th('Status', 'status')}
-              {th('Interest', 'interest')}
-              <th className="px-2.5 py-2.5 text-left text-[11px] font-semibold tracking-wide uppercase" style={{ color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
-                Status Override
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={11} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--muted)' }}>
-                  Loading…
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={11} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--muted)' }}>
-                  No vouchers match the current filters.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((v: VoucherStatus) => (
-                <VoucherRow key={v.id} voucher={v} onSave={updateVoucher} onDelete={deleteVoucher} />
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {viewMode === 'expanded' ? (
+        <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'var(--border)', background: 'var(--card)' }}>
+          <table className="w-full min-w-[1100px] border-collapse">
+            <VoucherTableHead sort={sort} onToggleSort={toggleSort} />
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={11} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--muted)' }}>Loading…</td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--muted)' }}>No vouchers match the current filters.</td>
+                </tr>
+              ) : (
+                filtered.map((v: VoucherStatus) => (
+                  <VoucherRow key={v.id} voucher={v} onSave={updateVoucher} onDelete={deleteVoucher} />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="rounded-lg border" style={{ borderColor: 'var(--border)', background: 'var(--card)' }}>
+          {loading ? (
+            <p className="px-4 py-6 text-center text-sm" style={{ color: 'var(--muted)' }}>Loading…</p>
+          ) : filtered.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm" style={{ color: 'var(--muted)' }}>No vouchers match the current filters.</p>
+          ) : (
+            grouped.map((g) => (
+              <div key={g.label || 'all'}>
+                {groupBy !== 'none' && (
+                  <div
+                    className="px-3 py-2 text-xs font-semibold tracking-wide uppercase"
+                    style={{ color: 'var(--muted)', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}
+                  >
+                    {g.label} <span className="font-normal normal-case">({g.rows.length})</span>
+                  </div>
+                )}
+                {g.rows.map((v) => (
+                  <CompactVoucherRow key={v.id} voucher={v} onSave={updateVoucher} onDelete={deleteVoucher} />
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       <button
         onClick={handleAdd}
