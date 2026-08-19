@@ -140,7 +140,13 @@ export default function Vouchers() {
 
   const totalValue = vouchers.reduce((sum, v) => sum + (typeof v.value === 'number' ? v.value : 0), 0)
   const openCount = vouchers.filter((v) => v.status === 'Open').length
-  const overdueCount = vouchers.filter((v) => v.ageing_bucket === '(1) Overdue').length
+  // Status is the master field for every summary count: a voucher only counts as
+  // "overdue" here if its status literally reads Expired. A voucher whose date has
+  // passed but carries a status_input override (Redeemed, Booked, ...) already shows
+  // that override as its status, not Expired, so it correctly falls out of this count
+  // even though its Ageing Bucket independently still reads "(1) Overdue" (that field
+  // is date-only and never looks at status_input -- see voucherLogic.ts).
+  const overdueCount = vouchers.filter((v) => v.status === 'Expired').length
 
   const selectCls = 'rounded border px-2.5 py-1.5 text-xs'
 
