@@ -37,18 +37,23 @@ export default function CompactVoucherRow({
     <div className="border-b" style={{ borderColor: 'var(--border)' }}>
       <div
         onClick={() => setExpanded((e) => !e)}
-        className="flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm hover:opacity-80"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm hover:opacity-80 sm:flex-nowrap cursor-pointer"
       >
-        <span className="w-3 text-xs select-none" style={{ color: 'var(--muted)' }}>
+        <span className="w-3 shrink-0 text-xs select-none" style={{ color: 'var(--muted)' }}>
           {expanded ? '▾' : '▸'}
         </span>
         <span className="min-w-0 flex-1 truncate font-medium">{voucher.name || '(untitled)'}</span>
-        <span className="w-20 shrink-0 text-right tabular-nums">{formatValue(voucher)}</span>
-        <span className="w-16 shrink-0 text-xs" style={{ color: 'var(--muted)' }}>{voucher.interest || '—'}</span>
-        <span className="w-20 shrink-0 truncate text-xs" style={{ color: 'var(--muted)' }}>{voucher.type || '—'}</span>
-        <span className="w-28 shrink-0 text-xs whitespace-nowrap" style={ageingStyle(voucher.ageing_bucket)}>
-          {voucher.ageing_bucket}
-        </span>
+        {/* On narrow screens this group drops to its own line below the name
+            (w-full forces a wrap inside the flex-wrap row above); from `sm:`
+            up, `sm:contents` un-wraps it back into the single-line layout. */}
+        <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 pl-6 sm:contents sm:pl-0">
+          <span className="w-20 shrink-0 text-right tabular-nums">{formatValue(voucher)}</span>
+          <span className="w-16 shrink-0 text-xs" style={{ color: 'var(--muted)' }}>{voucher.interest || '—'}</span>
+          <span className="w-20 shrink-0 truncate text-xs" style={{ color: 'var(--muted)' }}>{voucher.type || '—'}</span>
+          <span className="w-28 shrink-0 text-xs whitespace-nowrap" style={ageingStyle(voucher.ageing_bucket)}>
+            {voucher.ageing_bucket}
+          </span>
+        </div>
       </div>
       {expanded && (
         <div className="overflow-x-auto px-3 pb-3" onClick={(e) => e.stopPropagation()}>

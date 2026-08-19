@@ -57,22 +57,6 @@ function groupVouchers(list: VoucherStatus[], field: GroupField): { label: strin
   return orderedKeys.map((label) => ({ label, rows: groups.get(label)! }))
 }
 
-function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <span
-      onClick={onClick}
-      className="cursor-pointer rounded-full border px-2.5 py-1 text-xs select-none"
-      style={
-        active
-          ? { background: 'var(--primary)', color: '#fff', borderColor: 'var(--primary)' }
-          : { borderColor: 'var(--border)', background: 'var(--card)' }
-      }
-    >
-      {label}
-    </span>
-  )
-}
-
 export default function Vouchers() {
   const { vouchers, loading, error, createVoucher, updateVoucher, deleteVoucher } = useVouchers()
 
@@ -80,19 +64,12 @@ export default function Vouchers() {
   const [groupBy, setGroupBy] = useState<GroupField>('none')
 
   const [search, setSearch] = useState('')
-  const [types, setTypes] = useState<Set<string>>(new Set())
-  const [statuses, setStatuses] = useState<Set<string>>(new Set())
-  const [interests, setInterests] = useState<Set<string>>(new Set())
-  const [ageings, setAgeings] = useState<Set<string>>(new Set())
+  const [typeFilter, setTypeFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [interestFilter, setInterestFilter] = useState('')
+  const [ageingFilter, setAgeingFilter] = useState('')
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'expiry_date', dir: 'asc' })
   const [busy, setBusy] = useState(false)
-
-  const toggle = (set: Set<string>, setSet: (s: Set<string>) => void, val: string) => {
-    const next = new Set(set)
-    if (next.has(val)) next.delete(val)
-    else next.add(val)
-    setSet(next)
-  }
 
   const distinctTypes = useMemo(() => new Set([...TYPE_OPTIONS, ...vouchers.map((v) => v.type).filter(Boolean)]), [vouchers])
   const distinctInterests = useMemo(() => new Set([...INTEREST_OPTIONS, ...vouchers.map((v) => v.interest).filter(Boolean)]), [vouchers])
@@ -108,10 +85,10 @@ export default function Vouchers() {
         const hay = `${v.name} ${v.type} ${v.interest} ${v.status_input}`.toLowerCase()
         if (!hay.includes(search.toLowerCase())) return false
       }
-      if (types.size && !types.has(v.type)) return false
-      if (statuses.size && !statuses.has(v.status)) return false
-      if (interests.size && !interests.has(v.interest)) return false
-      if (ageings.size && !ageings.has(v.ageing_bucket)) return false
+      if (typeFilter && v.type !== typeFilter) return false
+      if (statusFilter && v.status !== statusFilter) return false
+      if (interestFilter && v.interest !== interestFilter) return false
+      if (ageingFilter && v.ageing_bucket !== ageingFilter) return false
       return true
     })
     list = [...list].sort((a, b) => {
@@ -127,16 +104,16 @@ export default function Vouchers() {
       return 0
     })
     return list
-  }, [vouchers, search, types, statuses, interests, ageings, sort])
+  }, [vouchers, search, typeFilter, statusFilter, interestFilter, ageingFilter, sort])
 
   const grouped = useMemo(() => groupVouchers(filtered, groupBy), [filtered, groupBy])
 
   const clearFilters = () => {
     setSearch('')
-    setTypes(new Set())
-    setStatuses(new Set())
-    setInterests(new Set())
-    setAgeings(new Set())
+    setTypeFilter('')
+    setStatusFilter('')
+    setInterestFilter('')
+    setAgeingFilter('')
   }
 
   const toggleSort = (key: SortKey) => {
@@ -207,55 +184,64 @@ export default function Vouchers() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-end gap-5 rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--card)' }}>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Search</label>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, type, interest…"
-            className="w-52 rounded border px-2 py-1.5 text-sm"
-            style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Type</label>
-          <div className="flex max-w-xs flex-wrap gap-1.5">
-            {[...distinctTypes].sort().map((t) => (
-              <Chip key={t} label={t} active={types.has(t)} onClick={() => toggle(types, setTypes, t)} />
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Status</label>
-          <div className="flex max-w-xs flex-wrap gap-1.5">
-            {[...distinctStatuses].sort().map((s) => (
-              <Chip key={s} label={s} active={statuses.has(s)} onClick={() => toggle(statuses, setStatuses, s)} />
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Interest</label>
-          <div className="flex max-w-xs flex-wrap gap-1.5">
-            {[...distinctInterests].sort().map((s) => (
-              <Chip key={s} label={s} active={interests.has(s)} onClick={() => toggle(interests, setInterests, s)} />
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Ageing</label>
-          <div className="flex max-w-xs flex-wrap gap-1.5">
-            {distinctAgeings.map((a) => (
-              <Chip key={a} label={a} active={ageings.has(a)} onClick={() => toggle(ageings, setAgeings, a)} />
-            ))}
-          </div>
-        </div>
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border p-2.5" style={{ borderColor: 'var(--border)', background: 'var(--card)' }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search…"
+          className="w-40 rounded border px-2 py-1.5 text-sm"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+        />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="rounded border px-2 py-1.5 text-sm"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+        >
+          <option value="">All types</option>
+          {[...distinctTypes].sort().map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded border px-2 py-1.5 text-sm"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+        >
+          <option value="">All statuses</option>
+          {[...distinctStatuses].sort().map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={interestFilter}
+          onChange={(e) => setInterestFilter(e.target.value)}
+          className="rounded border px-2 py-1.5 text-sm"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+        >
+          <option value="">All priorities</option>
+          {[...distinctInterests].sort().map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={ageingFilter}
+          onChange={(e) => setAgeingFilter(e.target.value)}
+          className="rounded border px-2 py-1.5 text-sm"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+        >
+          <option value="">All ageing</option>
+          {distinctAgeings.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
         <button
           onClick={clearFilters}
-          className="rounded border px-2.5 py-1.5 text-xs"
+          className="rounded border px-2.5 py-1.5 text-sm"
           style={{ borderColor: 'var(--border)', background: 'var(--card)', color: 'var(--text)' }}
         >
-          Clear filters
+          Clear
         </button>
       </div>
 
